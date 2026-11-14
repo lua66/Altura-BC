@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { CheckCircle2, FileSpreadsheet } from 'lucide-react';
+import { CheckCircle2, Lock } from 'lucide-react';
 import { SPREADSHEET_TITLE, type BoletinRow } from '../services/googleSheets';
 
 interface FooterProps {
@@ -8,6 +8,7 @@ interface FooterProps {
   onOpenSheetsManager: () => void;
   pendingCount: number;
   isSheetConnected: boolean;
+  isAdminUnlocked: boolean;
 }
 
 const SITE_PAGES = [
@@ -36,6 +37,7 @@ export function Footer({
   onOpenSheetsManager,
   pendingCount,
   isSheetConnected,
+  isAdminUnlocked,
 }: FooterProps) {
   const [email, setEmail] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -216,15 +218,19 @@ export function Footer({
             onClick={onOpenSheetsManager}
             className="inline-flex cursor-pointer items-center gap-2 rounded-sm border border-white/15 bg-[#121215] px-3.5 py-2 text-xs font-medium text-[#D4D4D8] transition-colors hover:border-[#FF1E6E] hover:text-[#F4F1EA]"
           >
-            <FileSpreadsheet
+            <Lock
               className="h-3.5 w-3.5 text-[#FF1E6E]"
               aria-hidden="true"
             />
             <span>
-              {isSheetConnected
-                ? `Google Sheets: ${SPREADSHEET_TITLE}`
-                : `Conectar hoja «${SPREADSHEET_TITLE}»`}
-              {pendingCount > 0 ? ` (${pendingCount} pendientes)` : ''}
+              {isAdminUnlocked
+                ? isSheetConnected
+                  ? `Google Sheets: ${SPREADSHEET_TITLE}`
+                  : `Propiedades Google (${SPREADSHEET_TITLE})`
+                : 'Propiedades Google'}
+              {isAdminUnlocked && pendingCount > 0
+                ? ` (${pendingCount} pendientes)`
+                : ''}
             </span>
           </button>
         </div>

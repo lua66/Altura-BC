@@ -30,6 +30,7 @@ import {
   type ConnectedSheetInfo,
   type RegistroRow,
 } from './services/googleSheets';
+import { isSessionUnlocked, setSessionUnlocked } from './utils/passcode';
 
 const KNOWN_PATHS = new Set([
   '/',
@@ -73,6 +74,9 @@ export default function App() {
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
 
   // Google Sheets & Auth state
+  const [isAdminUnlocked, setIsAdminUnlocked] = useState<boolean>(() =>
+    isSessionUnlocked()
+  );
   const [needsAuth, setNeedsAuth] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
@@ -194,6 +198,39 @@ export default function App() {
       'Altura BC — Club de Básquet · Ciudad de México';
   }, [currentPath]);
 
+  useEffect(() => {
+    if (isAdminUnlocked) return;
+
+    const handleContextMenu = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) {
+        return;
+      }
+      e.preventDefault();
+      setSheetsModalOpen(true);
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const key = e.key.toUpperCase();
+      const isInspectShortcut =
+        e.key === 'F12' ||
+        ((e.ctrlKey || e.metaKey) && e.shiftKey && ['I', 'J', 'C'].includes(key)) ||
+        ((e.ctrlKey || e.metaKey) && key === 'U');
+
+      if (isInspectShortcut) {
+        e.preventDefault();
+        setSheetsModalOpen(true);
+      }
+    };
+
+    document.addEventListener('contextmenu', handleContextMenu);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('contextmenu', handleContextMenu);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isAdminUnlocked]);
+
   const handleLogin = async () => {
     setIsLoggingIn(true);
     setSheetErrorMsg(null);
@@ -308,7 +345,7 @@ export default function App() {
   const handleRegistrationSubmit = async (row: RegistroRow) => {
     setPendingRegistros((prev) => [...prev, row]);
     const token = await getAccessToken();
-    if (token && sheetInfo && !needsAuth) {
+    if (isAdminUnlocked && token && sheetInfo && !needsAuth) {
       setConfirmLiveRegistro(row);
     }
   };
@@ -316,7 +353,7 @@ export default function App() {
   const handleNewsletterSubmit = async (row: BoletinRow) => {
     setPendingBoletin((prev) => [...prev, row]);
     const token = await getAccessToken();
-    if (token && sheetInfo && !needsAuth) {
+    if (isAdminUnlocked && token && sheetInfo && !needsAuth) {
       setConfirmLiveBoletin(row);
     }
   };
@@ -480,11 +517,21 @@ export default function App() {
         onOpenSheetsManager={() => setSheetsModalOpen(true)}
         pendingCount={pendingRegistros.length + pendingBoletin.length}
         isSheetConnected={Boolean(sheetInfo)}
+        isAdminUnlocked={isAdminUnlocked}
       />
 
       <SheetsManagerModal
         open={sheetsModalOpen}
         onClose={() => setSheetsModalOpen(false)}
+        isUnlocked={isAdminUnlocked}
+        onUnlock={() => {
+          setSessionUnlocked(true);
+          setIsAdminUnlocked(true);
+        }}
+        onLock={() => {
+          setSessionUnlocked(false);
+          setIsAdminUnlocked(false);
+        }}
         user={user}
         needsAuth={needsAuth}
         isLoggingIn={isLoggingIn}
