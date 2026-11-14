@@ -78,8 +78,9 @@ export function UniformShowcase({ onActionClick }: UniformShowcaseProps) {
                 —
               </span>
               <span>
-                Disponible bajo pedido por talla para jugadores del club (kit
-                completo o por pieza, se adquiere por separado).
+                El kit completo es obligatorio para jugar en el club y se
+                adquiere aparte de la mensualidad. Una vez que ya cuentas con tu
+                kit, puedes comprar prendas adicionales o dobles por separado.
               </span>
             </li>
           </ul>
