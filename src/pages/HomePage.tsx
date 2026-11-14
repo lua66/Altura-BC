@@ -12,6 +12,7 @@ import { CourtDiagram } from '../components/CourtDiagram';
 import { VenueGallery } from '../components/VenueGallery';
 import { FaqSection } from '../components/FaqSection';
 import { RegistrationSection } from '../components/RegistrationSection';
+import { UniformShowcase } from '../components/UniformShowcase';
 import type { RegistroRow } from '../services/googleSheets';
 
 interface HomePageProps {
@@ -335,6 +336,8 @@ export function HomePage({
           </div>
         </div>
       </section>
+
+      <UniformShowcase onActionClick={onGoToRegister} />
 
       {/* Memberships / Pricing Section */}
       <section id="membresias" className="mx-auto max-w-6xl px-6 py-20 md:py-24">
