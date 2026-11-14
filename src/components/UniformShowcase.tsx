@@ -78,8 +78,8 @@ export function UniformShowcase({ onActionClick }: UniformShowcaseProps) {
                 —
               </span>
               <span>
-                Playera oficial de entrenamiento incluida desde tu entrada al
-                Plan Club.
+                Disponible bajo pedido por talla para jugadores del club (kit
+                completo o por pieza, se adquiere por separado).
               </span>
             </li>
           </ul>
@@ -90,7 +90,7 @@ export function UniformShowcase({ onActionClick }: UniformShowcaseProps) {
               onClick={onActionClick}
               className="cursor-pointer whitespace-nowrap rounded-sm bg-[#FF1E6E] px-6 py-3.5 text-sm font-bold text-[#0D0D0F] transition-colors duration-150 hover:bg-[#ff3b81] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#F4F1EA]"
             >
-              Apartar lugar y elegir talla
+              Consultar disponibilidad y tallas
             </button>
           </div>
         </div>

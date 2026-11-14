@@ -208,7 +208,7 @@ export const PLANS: MembershipPlan[] = [
     features: [
       '2 a 4 sesiones semanales según etapa + partido de liga',
       'Ficha técnica individual 3 veces por temporada',
-      'Acceso a retas abiertas y playera del club',
+      'Acceso prioritario a retas abiertas y eventos del club',
     ],
     featured: true,
     footnote: 'EL PUNTO DE ENTRADA AL PROYECTO',
