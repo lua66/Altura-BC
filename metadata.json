@@ -1,0 +1,6 @@
+{
+  "name": "Altura BC",
+  "description": "Club de básquet en la Ciudad de México para entrenar en serio, competir y echar la reta con gente de tu nivel a 2,240 metros.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
