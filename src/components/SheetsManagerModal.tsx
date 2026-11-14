@@ -107,7 +107,7 @@ export function SheetsManagerModal({
   const handleUnlockSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setPassError(null);
-    if (!passInput) {
+    if (!passInput.trim()) {
       setPassError('Ingresa la contraseña de acceso.');
       return;
     }
@@ -121,6 +121,10 @@ export function SheetsManagerModal({
       } else {
         setPassError('Contraseña incorrecta. Intenta de nuevo.');
       }
+    } catch {
+      setPassError(
+        'No se pudo validar la contraseña en este momento. Intenta de nuevo.'
+      );
     } finally {
       setCheckingPass(false);
     }
@@ -129,18 +133,25 @@ export function SheetsManagerModal({
   const handleChangePassSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setChangePassFeedback(null);
-    const res = await updateAdminPasscode(currentPass, newPass);
-    if (res.ok) {
-      setCurrentPass('');
-      setNewPass('');
-      setChangePassFeedback({
-        type: 'ok',
-        text: 'Contraseña actualizada correctamente para este navegador.',
-      });
-    } else {
+    try {
+      const res = await updateAdminPasscode(currentPass, newPass);
+      if (res.ok) {
+        setCurrentPass('');
+        setNewPass('');
+        setChangePassFeedback({
+          type: 'ok',
+          text: 'Contraseña actualizada correctamente.',
+        });
+      } else {
+        setChangePassFeedback({
+          type: 'err',
+          text: res.error ?? 'No se pudo actualizar la contraseña.',
+        });
+      }
+    } catch {
       setChangePassFeedback({
         type: 'err',
-        text: res.error ?? 'No se pudo actualizar la contraseña.',
+        text: 'Error al guardar la nueva contraseña.',
       });
     }
   };
