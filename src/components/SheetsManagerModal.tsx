@@ -1,10 +1,11 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import {
   ExternalLink,
   Eye,
   EyeOff,
   FileSpreadsheet,
   KeyRound,
+  Link2,
   Lock,
   LogOut,
   RefreshCw,
@@ -45,6 +46,8 @@ interface SheetsManagerModalProps {
   onCreateSheetConfirmed: () => Promise<void>;
   onRefreshSheet: () => Promise<void>;
   onSyncPendingConfirmed: () => Promise<void>;
+  onLinkSheet: (urlOrId: string) => Promise<void>;
+  onUnlinkSheet: () => void;
 }
 
 export function SheetsManagerModal({
@@ -69,9 +72,14 @@ export function SheetsManagerModal({
   onCreateSheetConfirmed,
   onRefreshSheet,
   onSyncPendingConfirmed,
+  onLinkSheet,
+  onUnlinkSheet,
 }: SheetsManagerModalProps) {
-  const [activeTab, setActiveTab] = useState<'registros' | 'boletin'>('boletin');
+  const [activeTab, setActiveTab] = useState<'registros' | 'boletin'>(
+    'registros'
+  );
   const [confirmType, setConfirmType] = useState<'create' | 'sync' | null>(null);
+  const [sheetUrlInput, setSheetUrlInput] = useState('');
 
   // Password gate state
   const [passInput, setPassInput] = useState('');
@@ -88,6 +96,21 @@ export function SheetsManagerModal({
     text: string;
   } | null>(null);
 
+  useEffect(() => {
+    if (!open) return;
+    if (pendingRegistros.length > 0 || previewRegistros.length > 1) {
+      setActiveTab('registros');
+    } else if (pendingBoletin.length > 0 || previewBoletin.length > 1) {
+      setActiveTab('boletin');
+    }
+  }, [
+    open,
+    pendingRegistros.length,
+    pendingBoletin.length,
+    previewRegistros.length,
+    previewBoletin.length,
+  ]);
+
   if (!open) return null;
 
   const totalPending = pendingRegistros.length + pendingBoletin.length;
@@ -102,6 +125,13 @@ export function SheetsManagerModal({
     } else if (mode === 'sync') {
       await onSyncPendingConfirmed();
     }
+  };
+
+  const handleLinkSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!sheetUrlInput.trim()) return;
+    await onLinkSheet(sheetUrlInput);
+    setSheetUrlInput('');
   };
 
   const handleUnlockSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -417,125 +447,188 @@ export function SheetsManagerModal({
               </p>
             )}
 
+            {/* Pending local queue — always visible when unlocked */}
+            {totalPending > 0 && (
+              <div className="mt-5 rounded-sm border border-[#FF1E6E]/40 bg-[#18181D] p-5">
+                <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+                  <div>
+                    <p className="text-sm font-semibold text-[#F4F1EA]">
+                      Envíos del formulario en espera:{' '}
+                      <span className="tabular-nums text-[#FF1E6E]">
+                        {totalPending}
+                      </span>
+                    </p>
+                    <p className="mt-1 text-xs text-[#A1A1AA]">
+                      {pendingRegistros.length} de clase de prueba (pestaña{' '}
+                      {TAB_REGISTROS}) · {pendingBoletin.length} de boletín
+                      (pestaña {TAB_BOLETIN}).
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={isBusy || !sheetInfo || needsAuth}
+                    onClick={() => setConfirmType('sync')}
+                    className="shrink-0 cursor-pointer rounded-sm bg-[#FF1E6E] px-4 py-2.5 text-xs font-bold text-[#0D0D0F] hover:bg-[#ff3b81] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Guardar pendientes en Google Sheets
+                  </button>
+                </div>
+
+                {(!user || needsAuth || !sheetInfo) && (
+                  <p className="mt-3 text-xs text-[#D4D4D8]">
+                    Estos envíos están guardados en este navegador y aún no se
+                    han enviado a Google Sheets. Conecta tu cuenta de Google y
+                    vincula tu hoja para subirlos.
+                  </p>
+                )}
+
+                <ul className="mt-3 space-y-1.5 border-t border-white/10 pt-3 text-xs text-[#D4D4D8]">
+                  {pendingRegistros.map((r, idx) => (
+                    <li key={`reg-${idx}`}>
+                      <span className="font-semibold text-[#F4F1EA]">
+                        [Registro] {r.nombre}
+                      </span>{' '}
+                      · {r.contacto} · {r.categoria} ({r.fecha})
+                    </li>
+                  ))}
+                  {pendingBoletin.map((b, idx) => (
+                    <li key={`bol-${idx}`}>
+                      <span className="font-semibold text-[#F4F1EA]">
+                        [Boletín] {b.correo}
+                      </span>{' '}
+                      · {b.fecha}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             {/* Sheet connection & pending queue */}
             {user && !needsAuth && (
               <div className="mt-6 space-y-6">
-                <div className="flex flex-col justify-between gap-4 rounded-sm border border-white/10 bg-[#141417] p-5 sm:flex-row sm:items-center">
-                  <div className="flex items-start gap-3">
-                    <FileSpreadsheet
-                      className="mt-0.5 h-5 w-5 shrink-0 text-[#FF1E6E]"
-                      aria-hidden="true"
-                    />
-                    <div>
+                <div className="rounded-sm border border-white/10 bg-[#141417] p-5">
+                  <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+                    <div className="flex items-start gap-3">
+                      <FileSpreadsheet
+                        className="mt-0.5 h-5 w-5 shrink-0 text-[#FF1E6E]"
+                        aria-hidden="true"
+                      />
+                      <div>
+                        {sheetInfo ? (
+                          <>
+                            <p className="text-sm font-semibold text-[#F4F1EA]">
+                              Conectada: {sheetInfo.title}
+                            </p>
+                            <p className="mt-0.5 text-xs text-[#A1A1AA]">
+                              Pestañas actuales:{' '}
+                              {sheetInfo.tabs.length > 0
+                                ? sheetInfo.tabs.join(' · ')
+                                : 'Sin pestañas'}
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-sm font-semibold text-[#F4F1EA]">
+                              No se detectó la hoja «{SPREADSHEET_TITLE}»
+                              creada por esta web
+                            </p>
+                            <p className="mt-0.5 text-xs text-[#A1A1AA]">
+                              Si la creaste manualmente en Google Drive, pega su
+                              enlace abajo para conectarla. Si aún no existe,
+                              créala con un clic.
+                            </p>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2.5">
                       {sheetInfo ? (
                         <>
-                          <p className="text-sm font-semibold text-[#F4F1EA]">
-                            Conectada: {sheetInfo.title}
-                          </p>
-                          <p className="mt-0.5 text-xs text-[#A1A1AA]">
-                            Pestañas activas: {sheetInfo.tabs.join(' · ')}
-                          </p>
+                          <button
+                            type="button"
+                            disabled={isBusy}
+                            onClick={onRefreshSheet}
+                            className="inline-flex cursor-pointer items-center gap-1.5 rounded-sm border border-white/15 px-3.5 py-2 text-xs font-semibold text-[#F4F1EA] hover:border-white/35 disabled:opacity-50"
+                          >
+                            <RefreshCw
+                              className="h-3.5 w-3.5"
+                              aria-hidden="true"
+                            />
+                            <span>Actualizar</span>
+                          </button>
+                          <a
+                            href={sheetInfo.spreadsheetUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 rounded-sm bg-[#F4F1EA] px-3.5 py-2 text-xs font-bold text-[#0D0D0F] hover:bg-white"
+                          >
+                            <span>Abrir hoja</span>
+                            <ExternalLink
+                              className="h-3.5 w-3.5"
+                              aria-hidden="true"
+                            />
+                          </a>
+                          <button
+                            type="button"
+                            disabled={isBusy}
+                            onClick={onUnlinkSheet}
+                            className="cursor-pointer rounded-sm border border-white/15 px-3 py-2 text-xs font-semibold text-[#A1A1AA] hover:border-white/30 hover:text-[#F4F1EA]"
+                          >
+                            Cambiar hoja
+                          </button>
                         </>
                       ) : (
-                        <>
-                          <p className="text-sm font-semibold text-[#F4F1EA]">
-                            La hoja «{SPREADSHEET_TITLE}» aún no existe en tu
-                            Drive
-                          </p>
-                          <p className="mt-0.5 text-xs text-[#A1A1AA]">
-                            Créala con un clic para habilitar las pestañas{' '}
-                            {TAB_BOLETIN} y {TAB_REGISTROS}.
-                          </p>
-                        </>
+                        <button
+                          type="button"
+                          disabled={isBusy}
+                          onClick={() => setConfirmType('create')}
+                          className="cursor-pointer rounded-sm bg-[#FF1E6E] px-4 py-2.5 text-xs font-bold text-[#0D0D0F] hover:bg-[#ff3b81] disabled:opacity-50"
+                        >
+                          Crear hoja «{SPREADSHEET_TITLE}»
+                        </button>
                       )}
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2.5">
-                    {sheetInfo ? (
-                      <>
-                        <button
-                          type="button"
-                          disabled={isBusy}
-                          onClick={onRefreshSheet}
-                          className="inline-flex cursor-pointer items-center gap-1.5 rounded-sm border border-white/15 px-3.5 py-2 text-xs font-semibold text-[#F4F1EA] hover:border-white/35 disabled:opacity-50"
-                        >
-                          <RefreshCw
-                            className="h-3.5 w-3.5"
-                            aria-hidden="true"
-                          />
-                          <span>Actualizar</span>
-                        </button>
-                        <a
-                          href={sheetInfo.spreadsheetUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 rounded-sm bg-[#F4F1EA] px-3.5 py-2 text-xs font-bold text-[#0D0D0F] hover:bg-white"
-                        >
-                          <span>Abrir hoja</span>
-                          <ExternalLink
-                            className="h-3.5 w-3.5"
-                            aria-hidden="true"
-                          />
-                        </a>
-                      </>
-                    ) : (
-                      <button
-                        type="button"
-                        disabled={isBusy}
-                        onClick={() => setConfirmType('create')}
-                        className="cursor-pointer rounded-sm bg-[#FF1E6E] px-4 py-2.5 text-xs font-bold text-[#0D0D0F] hover:bg-[#ff3b81] disabled:opacity-50"
-                      >
-                        Crear hoja «{SPREADSHEET_TITLE}»
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Pending local queue */}
-                {totalPending > 0 && (
-                  <div className="flex flex-col justify-between gap-4 rounded-sm border border-[#FF1E6E]/40 bg-[#18181D] p-5 sm:flex-row sm:items-center">
-                    <div>
-                      <p className="text-sm font-semibold text-[#F4F1EA]">
-                        Suscripciones pendientes por guardar:{' '}
-                        <span className="tabular-nums text-[#FF1E6E]">
-                          {totalPending}
-                        </span>
-                      </p>
-                      <p className="mt-1 text-xs text-[#A1A1AA]">
-                        {pendingBoletin.length} de boletín ·{' '}
-                        {pendingRegistros.length} de clase de prueba.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      disabled={isBusy || !sheetInfo}
-                      onClick={() => setConfirmType('sync')}
-                      className="shrink-0 cursor-pointer rounded-sm bg-[#FF1E6E] px-4 py-2.5 text-xs font-bold text-[#0D0D0F] hover:bg-[#ff3b81] disabled:cursor-not-allowed disabled:opacity-50"
+                  {!sheetInfo && (
+                    <form
+                      onSubmit={handleLinkSubmit}
+                      className="mt-4 flex flex-col gap-2 border-t border-white/10 pt-4 sm:flex-row"
                     >
-                      Guardar pendientes en Google Sheets
-                    </button>
-                  </div>
-                )}
+                      <label htmlFor="existing-sheet-url" className="sr-only">
+                        Enlace o ID de hoja existente de Google Sheets
+                      </label>
+                      <div className="relative flex-1">
+                        <Link2
+                          className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[#71717A]"
+                          aria-hidden="true"
+                        />
+                        <input
+                          id="existing-sheet-url"
+                          type="text"
+                          value={sheetUrlInput}
+                          onChange={(e) => setSheetUrlInput(e.target.value)}
+                          placeholder="Pega aquí el enlace de tu Google Sheet «web basket mexico»"
+                          className="w-full rounded-sm border border-white/15 bg-[#121215] py-2 pr-3 pl-9 text-xs text-[#F4F1EA] placeholder:text-[#71717A] focus:border-[#FF1E6E] focus:outline-none"
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={isBusy || !sheetUrlInput.trim()}
+                        className="shrink-0 cursor-pointer rounded-sm border border-white/20 px-4 py-2 text-xs font-bold text-[#F4F1EA] hover:border-[#FF1E6E] disabled:opacity-50"
+                      >
+                        Conectar hoja existente
+                      </button>
+                    </form>
+                  )}
+                </div>
 
                 {/* Preview table from Google Sheets */}
                 {sheetInfo && (
                   <div>
                     <div className="flex items-center justify-between gap-4">
                       <div role="tablist" className="flex gap-2">
-                        <button
-                          type="button"
-                          role="tab"
-                          aria-selected={activeTab === 'boletin'}
-                          onClick={() => setActiveTab('boletin')}
-                          className={`cursor-pointer rounded-sm border px-3.5 py-2 text-xs font-bold ${
-                            activeTab === 'boletin'
-                              ? 'border-[#FF1E6E] bg-[#FF1E6E] text-[#0D0D0F]'
-                              : 'border-white/15 bg-[#141417] text-[#D4D4D8]'
-                          }`}
-                        >
-                          Pestaña {TAB_BOLETIN}
-                        </button>
                         <button
                           type="button"
                           role="tab"
@@ -547,7 +640,22 @@ export function SheetsManagerModal({
                               : 'border-white/15 bg-[#141417] text-[#D4D4D8]'
                           }`}
                         >
-                          Pestaña {TAB_REGISTROS}
+                          Pestaña {TAB_REGISTROS} (
+                          {Math.max(0, previewRegistros.length - 1)})
+                        </button>
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={activeTab === 'boletin'}
+                          onClick={() => setActiveTab('boletin')}
+                          className={`cursor-pointer rounded-sm border px-3.5 py-2 text-xs font-bold ${
+                            activeTab === 'boletin'
+                              ? 'border-[#FF1E6E] bg-[#FF1E6E] text-[#0D0D0F]'
+                              : 'border-white/15 bg-[#141417] text-[#D4D4D8]'
+                          }`}
+                        >
+                          Pestaña {TAB_BOLETIN} (
+                          {Math.max(0, previewBoletin.length - 1)})
                         </button>
                       </div>
                     </div>
@@ -555,7 +663,17 @@ export function SheetsManagerModal({
                     <div className="mt-3 overflow-x-auto rounded-sm border border-white/10 bg-[#0D0D0F]">
                       {activeRows.length === 0 ? (
                         <p className="p-5 text-xs text-[#A1A1AA]">
-                          Aún no hay filas registradas en esta pestaña.
+                          {sheetInfo.tabs.includes(
+                            activeTab === 'registros'
+                              ? TAB_REGISTROS
+                              : TAB_BOLETIN
+                          )
+                            ? 'Aún no hay filas registradas en esta pestaña.'
+                            : `Esta hoja aún no tiene la pestaña «${
+                                activeTab === 'registros'
+                                  ? TAB_REGISTROS
+                                  : TAB_BOLETIN
+                              }». Se creará automáticamente en cuanto guardes tu primer registro.`}
                         </p>
                       ) : (
                         <table className="w-full border-collapse text-left text-xs">

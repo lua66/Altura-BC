@@ -19,10 +19,14 @@ import {
 import {
   appendBoletinRows,
   appendRegistrosRows,
+  clearLinkedSpreadsheetId,
   createWebBasketMexicoSheet,
   ensureRequiredTabs,
+  extractSpreadsheetId,
   findWebBasketMexicoSheet,
+  getSpreadsheetMetadata,
   readSheetPreview,
+  saveLinkedSpreadsheetId,
   SPREADSHEET_TITLE,
   TAB_BOLETIN,
   TAB_REGISTROS,
@@ -147,9 +151,8 @@ export default function App() {
       try {
         const found = await findWebBasketMexicoSheet(accessToken);
         if (found) {
-          const updated = await ensureRequiredTabs(accessToken, found);
-          setSheetInfo(updated);
-          await loadSheetPreviews(accessToken, updated);
+          setSheetInfo(found);
+          await loadSheetPreviews(accessToken, found);
         } else {
           setSheetInfo(null);
           setPreviewRegistros([]);
@@ -297,7 +300,10 @@ export default function App() {
     setIsBusy(true);
     setSheetErrorMsg(null);
     try {
-      const refreshed = await ensureRequiredTabs(token, sheetInfo);
+      const refreshed = await getSpreadsheetMetadata(
+        token,
+        sheetInfo.spreadsheetId
+      );
       setSheetInfo(refreshed);
       await loadSheetPreviews(token, refreshed);
       setSheetStatusMsg('Datos actualizados desde Google Sheets.');
@@ -312,6 +318,52 @@ export default function App() {
     }
   };
 
+  const handleLinkExistingSheet = async (urlOrId: string) => {
+    const token = await getAccessToken();
+    if (!token) {
+      setNeedsAuth(true);
+      return;
+    }
+    const id = extractSpreadsheetId(urlOrId);
+    if (!id) {
+      setSheetErrorMsg(
+        'Pega un enlace válido de Google Sheets (por ejemplo: https://docs.google.com/spreadsheets/d/...).'
+      );
+      return;
+    }
+    setIsBusy(true);
+    setSheetErrorMsg(null);
+    setSheetStatusMsg(null);
+    try {
+      const meta = await getSpreadsheetMetadata(token, id);
+      saveLinkedSpreadsheetId(meta.spreadsheetId);
+      setSheetInfo(meta);
+      await loadSheetPreviews(token, meta);
+      setSheetStatusMsg(
+        `Hoja «${meta.title}» conectada correctamente. Si tienes registros pendientes, pulsa "Guardar pendientes en Google Sheets".`
+      );
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'No se pudo abrir esa hoja de Google Sheets. Verifica que tu cuenta tenga permiso de edición.';
+      setSheetErrorMsg(message);
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleUnlinkSheet = () => {
+    clearLinkedSpreadsheetId();
+    setSheetInfo(null);
+    setPreviewRegistros([]);
+    setPreviewBoletin([]);
+    setSheetStatusMsg(
+      'Hoja desvinculada. Ahora puedes crear una nueva o conectar otra por enlace.'
+    );
+    setSheetErrorMsg(null);
+  };
+
   const handleSyncPendingConfirmed = async () => {
     const token = await getAccessToken();
     if (!token || !sheetInfo) return;
@@ -320,6 +372,7 @@ export default function App() {
     setSheetStatusMsg(null);
     try {
       const updatedInfo = await ensureRequiredTabs(token, sheetInfo);
+      setSheetInfo(updatedInfo);
       await Promise.all([
         appendRegistrosRows(token, updatedInfo.spreadsheetId, pendingRegistros),
         appendBoletinRows(token, updatedInfo.spreadsheetId, pendingBoletin),
@@ -329,7 +382,7 @@ export default function App() {
       setPendingBoletin([]);
       await loadSheetPreviews(token, updatedInfo);
       setSheetStatusMsg(
-        `Se guardaron ${syncedTotal} registro(s) en «${SPREADSHEET_TITLE}».`
+        `Se guardaron ${syncedTotal} registro(s) en «${updatedInfo.title}».`
       );
     } catch (err: unknown) {
       const message =
@@ -347,6 +400,11 @@ export default function App() {
     const token = await getAccessToken();
     if (isAdminUnlocked && token && sheetInfo && !needsAuth) {
       setConfirmLiveRegistro(row);
+    } else if (isAdminUnlocked) {
+      setSheetStatusMsg(
+        `Registro de "${row.nombre}" guardado en espera. Conecta Google y tu hoja para enviarlo a Google Sheets.`
+      );
+      setSheetsModalOpen(true);
     }
   };
 
@@ -355,6 +413,11 @@ export default function App() {
     const token = await getAccessToken();
     if (isAdminUnlocked && token && sheetInfo && !needsAuth) {
       setConfirmLiveBoletin(row);
+    } else if (isAdminUnlocked) {
+      setSheetStatusMsg(
+        `Suscripción de "${row.correo}" guardada en espera. Conecta Google y tu hoja para enviarla a Google Sheets.`
+      );
+      setSheetsModalOpen(true);
     }
   };
 
@@ -363,14 +426,26 @@ export default function App() {
     const token = await getAccessToken();
     if (!token) return;
     setIsBusy(true);
+    setSheetErrorMsg(null);
     try {
-      await appendRegistrosRows(token, sheetInfo.spreadsheetId, [
+      const updatedInfo = await ensureRequiredTabs(token, sheetInfo);
+      setSheetInfo(updatedInfo);
+      await appendRegistrosRows(token, updatedInfo.spreadsheetId, [
         confirmLiveRegistro,
       ]);
       setPendingRegistros((prev) =>
         prev.filter((r) => r !== confirmLiveRegistro)
       );
-      await loadSheetPreviews(token, sheetInfo);
+      await loadSheetPreviews(token, updatedInfo);
+      setSheetStatusMsg(
+        `Registro de "${confirmLiveRegistro.nombre}" guardado en la pestaña ${TAB_REGISTROS} de «${updatedInfo.title}».`
+      );
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'No se pudo guardar el registro en Google Sheets.';
+      setSheetErrorMsg(message);
     } finally {
       setIsBusy(false);
       setConfirmLiveRegistro(null);
@@ -382,12 +457,24 @@ export default function App() {
     const token = await getAccessToken();
     if (!token) return;
     setIsBusy(true);
+    setSheetErrorMsg(null);
     try {
-      await appendBoletinRows(token, sheetInfo.spreadsheetId, [
+      const updatedInfo = await ensureRequiredTabs(token, sheetInfo);
+      setSheetInfo(updatedInfo);
+      await appendBoletinRows(token, updatedInfo.spreadsheetId, [
         confirmLiveBoletin,
       ]);
       setPendingBoletin((prev) => prev.filter((b) => b !== confirmLiveBoletin));
-      await loadSheetPreviews(token, sheetInfo);
+      await loadSheetPreviews(token, updatedInfo);
+      setSheetStatusMsg(
+        `Correo "${confirmLiveBoletin.correo}" guardado en la pestaña ${TAB_BOLETIN} de «${updatedInfo.title}».`
+      );
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'No se pudo guardar la suscripción en Google Sheets.';
+      setSheetErrorMsg(message);
     } finally {
       setIsBusy(false);
       setConfirmLiveBoletin(null);
@@ -548,6 +635,8 @@ export default function App() {
         onCreateSheetConfirmed={handleCreateSheetConfirmed}
         onRefreshSheet={handleRefreshSheet}
         onSyncPendingConfirmed={handleSyncPendingConfirmed}
+        onLinkSheet={handleLinkExistingSheet}
+        onUnlinkSheet={handleUnlinkSheet}
       />
 
       <ConfirmActionModal

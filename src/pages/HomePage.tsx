@@ -13,6 +13,7 @@ import { VenueGallery } from '../components/VenueGallery';
 import { FaqSection } from '../components/FaqSection';
 import { RegistrationSection } from '../components/RegistrationSection';
 import { UniformShowcase } from '../components/UniformShowcase';
+import { ClubSloganSection } from '../components/ClubSloganSection';
 import type { RegistroRow } from '../services/googleSheets';
 
 interface HomePageProps {
@@ -440,6 +441,8 @@ export function HomePage({
         onClearPlan={onClearPlan}
         onSubmitRegistration={onSubmitRegistration}
       />
+
+      <ClubSloganSection onGoToRegister={onGoToRegister} />
     </>
   );
 }

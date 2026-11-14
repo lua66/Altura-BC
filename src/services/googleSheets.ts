@@ -2,6 +2,41 @@ export const SPREADSHEET_TITLE = 'web basket mexico';
 export const TAB_REGISTROS = 'Registros';
 export const TAB_BOLETIN = 'Boletin';
 
+const LINKED_SHEET_ID_KEY = 'altura_bc_linked_spreadsheet_id';
+
+export function getLinkedSpreadsheetId(): string | null {
+  try {
+    return localStorage.getItem(LINKED_SHEET_ID_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function saveLinkedSpreadsheetId(spreadsheetId: string): void {
+  try {
+    localStorage.setItem(LINKED_SHEET_ID_KEY, spreadsheetId);
+  } catch {
+    // ignore storage errors
+  }
+}
+
+export function clearLinkedSpreadsheetId(): void {
+  try {
+    localStorage.removeItem(LINKED_SHEET_ID_KEY);
+  } catch {
+    // ignore storage errors
+  }
+}
+
+export function extractSpreadsheetId(input: string): string | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+  const urlMatch = trimmed.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  if (urlMatch?.[1]) return urlMatch[1];
+  if (/^[a-zA-Z0-9-_]{20,}$/.test(trimmed)) return trimmed;
+  return null;
+}
+
 export interface RegistroRow {
   fecha: string;
   nombre: string;
@@ -79,6 +114,15 @@ async function fetchGoogleJson<T>(
 export async function findWebBasketMexicoSheet(
   accessToken: string
 ): Promise<ConnectedSheetInfo | null> {
+  const linkedId = getLinkedSpreadsheetId();
+  if (linkedId) {
+    try {
+      return await getSpreadsheetMetadata(accessToken, linkedId);
+    } catch {
+      clearLinkedSpreadsheetId();
+    }
+  }
+
   const query = encodeURIComponent(
     `name='${SPREADSHEET_TITLE}' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false`
   );
@@ -90,7 +134,9 @@ export async function findWebBasketMexicoSheet(
   const match = data.files?.[0];
   if (!match?.id) return null;
 
-  return getSpreadsheetMetadata(accessToken, match.id);
+  const meta = await getSpreadsheetMetadata(accessToken, match.id);
+  saveLinkedSpreadsheetId(meta.spreadsheetId);
+  return meta;
 }
 
 export async function getSpreadsheetMetadata(
@@ -152,6 +198,7 @@ export async function createWebBasketMexicoSheet(
     'Origen',
   ]);
 
+  saveLinkedSpreadsheetId(spreadsheetId);
   return getSpreadsheetMetadata(accessToken, spreadsheetId);
 }
 
@@ -176,34 +223,41 @@ export async function ensureRequiredTabs(
         }),
       }
     );
-
-    if (missingTabs.includes(TAB_REGISTROS)) {
-      await writeHeadersIfNeeded(
-        accessToken,
-        info.spreadsheetId,
-        TAB_REGISTROS,
-        [
-          'Fecha',
-          'Nombre',
-          'WhatsApp o correo',
-          'Categoría',
-          'Nivel',
-          'Plan de interés',
-        ]
-      );
-    }
-
-    if (missingTabs.includes(TAB_BOLETIN)) {
-      await writeHeadersIfNeeded(
-        accessToken,
-        info.spreadsheetId,
-        TAB_BOLETIN,
-        ['Fecha', 'Correo electrónico', 'Origen']
-      );
-    }
   }
 
+  // Ensure headers exist if either tab is empty
+  await writeHeadersIfEmpty(accessToken, info.spreadsheetId, TAB_REGISTROS, [
+    'Fecha',
+    'Nombre',
+    'WhatsApp o correo',
+    'Categoría',
+    'Nivel',
+    'Plan de interés',
+  ]);
+
+  await writeHeadersIfEmpty(accessToken, info.spreadsheetId, TAB_BOLETIN, [
+    'Fecha',
+    'Correo electrónico',
+    'Origen',
+  ]);
+
   return getSpreadsheetMetadata(accessToken, info.spreadsheetId);
+}
+
+async function writeHeadersIfEmpty(
+  accessToken: string,
+  spreadsheetId: string,
+  tabName: string,
+  headers: string[]
+): Promise<void> {
+  const checkRange = encodeURIComponent(`'${tabName}'!A1:A1`);
+  const existing = await fetchGoogleJson<{ values?: string[][] }>(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${checkRange}`,
+    accessToken
+  );
+  if (!existing.values || existing.values.length === 0) {
+    await writeHeadersIfNeeded(accessToken, spreadsheetId, tabName, headers);
+  }
 }
 
 async function writeHeadersIfNeeded(
